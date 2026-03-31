@@ -1,13 +1,37 @@
+from importlib.metadata import version
 from typing import Annotated
 
 import typer
 
 from twinbird import instance as inst
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"twinbird {version('twinbird')}")
+        raise typer.Exit
+
+
 app = typer.Typer(
     name="twinbird",
     help="Manage multiple NetBird instances with isolated configs and interfaces.",
 )
+
+
+@app.callback()
+def main(
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "-v",
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show version and exit.",
+        ),
+    ] = False,
+) -> None:
+    pass
 
 
 @app.command()
