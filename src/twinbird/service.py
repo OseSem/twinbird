@@ -212,7 +212,39 @@ def _is_registered_linux(name: str) -> bool:
 
 
 # --- macOS: launchd user agent ---
-# (stub — implemented in Task 4)
+
+
+def _launchd_plist_dir() -> Path:
+    return Path.home() / "Library" / "LaunchAgents"
+
+
+def _launchd_plist_path(name: str) -> Path:
+    return _launchd_plist_dir() / f"com.twinbird.{name}.plist"
+
+
+_LAUNCHD_PLIST_TEMPLATE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.twinbird.{name}</string>
+    <key>ProgramArguments</key>
+    <array>
+{program_arguments}
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{log_file}</string>
+    <key>StandardErrorPath</key>
+    <string>{log_file}</string>
+</dict>
+</plist>
+"""
 
 
 def _register_macos(
@@ -222,12 +254,47 @@ def _register_macos(
     daemon_addr: str,
     log_file: Path,
 ) -> None:
-    pass
+    plist_dir = _launchd_plist_dir()
+    plist_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd_parts = _build_netbird_cmd(netbird_bin, config_dir, daemon_addr, log_file)
+    program_arguments = "\n".join(
+        f"        <string>{part}</string>" for part in cmd_parts
+    )
+
+    plist_path = _launchd_plist_path(name)
+    plist_path.write_text(
+        _LAUNCHD_PLIST_TEMPLATE.format(
+            name=name,
+            program_arguments=program_arguments,
+            log_file=str(log_file),
+        )
+    )
+
+    result = subprocess.run(
+        ["launchctl", "load", str(plist_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        typer.echo(
+            f"Warning: failed to register service for '{name}': {result.stderr}",
+            err=True,
+        )
 
 
 def _unregister_macos(name: str) -> None:
-    pass
+    plist_path = _launchd_plist_path(name)
+    if plist_path.exists():
+        subprocess.run(
+            ["launchctl", "unload", str(plist_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        plist_path.unlink()
 
 
 def _is_registered_macos(name: str) -> bool:
-    return False
+    return _launchd_plist_path(name).exists()
