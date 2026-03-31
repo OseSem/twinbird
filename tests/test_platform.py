@@ -27,7 +27,7 @@ class TestGetPlatformConfig:
             patch("twinbird.platform.sys.platform", "win32"),
             patch.dict(
                 "os.environ",
-                {"APPDATA": "C:\\Users\\user\\AppData\\Roaming"},
+                {"APPDATA": "C:/Users/user/AppData/Roaming"},
                 clear=True,
             ),
         ):
