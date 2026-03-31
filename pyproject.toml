@@ -1,6 +1,6 @@
 [project]
 name = "twinbird"
-version = "0.1.1"
+version = "0.1.2"
 description = "Manage multiple NetBird instances with isolated configs, sockets, and interfaces"
 readme = "README.md"
 license = { text = "MIT" }
