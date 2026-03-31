@@ -1,5 +1,10 @@
 # twinbird
 
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+![PyPI - Version](https://img.shields.io/pypi/v/twinbird)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/twinbird)
+
+
 Manage multiple [NetBird](https://netbird.io) instances on a single machine with isolated configs, daemon sockets, and WireGuard interfaces.
 
 ## Install
