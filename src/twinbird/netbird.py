@@ -27,7 +27,6 @@ def run_service(
     netbird_bin: str,
     config_dir: Path,
     daemon_addr: str,
-    interface_name: str,
 ) -> subprocess.Popen[Any]:
     log_file = config_dir / "daemon.log"
     cmd = [
@@ -40,8 +39,6 @@ def run_service(
         daemon_addr,
         "--log-file",
         str(log_file),
-        "--interface-name",
-        interface_name,
     ]
 
     log_handle = open(log_file, "a")  # noqa: SIM115
@@ -65,6 +62,7 @@ def run_up(
     daemon_addr: str,
     management_url: str,
     setup_key: str | None = None,
+    interface_name: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     cmd = [
         netbird_bin,
@@ -75,10 +73,9 @@ def run_up(
         management_url,
     ]
     if setup_key:
-        cmd += [
-            "--setup-key",
-            setup_key,
-        ]
+        cmd += ["--setup-key", setup_key]
+    if interface_name:
+        cmd += ["--interface-name", interface_name]
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 

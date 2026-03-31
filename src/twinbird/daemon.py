@@ -37,11 +37,10 @@ def start_daemon(
     netbird_bin: str,
     config_dir: Path,
     daemon_addr: str,
-    interface_name: str,
     config_root: Path,
     name: str,
 ) -> int:
-    proc = netbird.run_service(netbird_bin, config_dir, daemon_addr, interface_name)
+    proc = netbird.run_service(netbird_bin, config_dir, daemon_addr)
     write_pid(config_root, name, proc.pid)
 
     for _ in range(10):

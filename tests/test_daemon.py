@@ -30,7 +30,6 @@ class TestStartDaemon:
                 netbird_bin="netbird",
                 config_dir=tmp_path / "office",
                 daemon_addr="tcp://127.0.0.1:52200",
-                interface_name="wt7",
                 config_root=tmp_path,
                 name="office",
             )
@@ -51,7 +50,6 @@ class TestStartDaemon:
                     netbird_bin="netbird",
                     config_dir=tmp_path / "office",
                     daemon_addr="tcp://127.0.0.1:52200",
-                    interface_name="wt7",
                     config_root=tmp_path,
                     name="office",
                 )

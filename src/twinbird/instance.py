@@ -50,13 +50,14 @@ def up(
         netbird_bin=netbird_bin,
         config_dir=config_dir,
         daemon_addr=resolved_addr,
-        interface_name=resolved_iface,
         config_root=platform.config_root,
         name=name,
     )
 
     typer.echo(f"Connecting to {management_url}...")
-    result = run_up(netbird_bin, resolved_addr, management_url, setup_key)
+    result = run_up(
+        netbird_bin, resolved_addr, management_url, setup_key, resolved_iface
+    )
     if result.returncode != 0:
         typer.echo(f"Failed to connect: {result.stderr}", err=True)
         raise typer.Exit(1)
