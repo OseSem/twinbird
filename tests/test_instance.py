@@ -55,6 +55,8 @@ class TestUp:
         platform = _mock_platform(tmp_path)
         ensure_instance_dir(tmp_path, "office")
         write_pid(tmp_path, "office", 42)
+        meta = InstanceMetadata("office", "url", "addr", "wt7", 42, "t")
+        write_metadata(tmp_path, meta)
 
         with (
             patch("twinbird.instance.get_platform_config", return_value=platform),

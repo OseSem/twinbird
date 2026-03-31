@@ -39,8 +39,13 @@ def up(
 
     pid = read_pid(platform.config_root, name)
     if pid and is_process_alive(pid):
-        typer.echo(f"Instance '{name}' is already running (PID {pid}).")
-        return
+        metadata = read_metadata(platform.config_root, name)
+        if metadata:
+            typer.echo(f"Instance '{name}' is already running (PID {pid}).")
+            return
+        # PID exists but no metadata — leftover from a failed start, kill it
+        typer.echo(f"Cleaning up orphaned daemon (PID {pid})...")
+        stop_daemon(platform.config_root, name)
 
     if pid:
         remove_pid(platform.config_root, name)
