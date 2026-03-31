@@ -44,9 +44,10 @@ def run_service(
         interface_name,
     ]
 
+    log_handle = open(log_file, "a")  # noqa: SIM115
     kwargs: dict[str, Any] = {
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
+        "stdout": log_handle,
+        "stderr": log_handle,
     }
 
     if sys.platform == "win32":
