@@ -112,6 +112,7 @@ def down(name: str) -> None:
 
     if not is_process_alive(pid):
         remove_pid(platform.config_root, name)
+        unregister_service(name)
         typer.echo(f"Instance '{name}' is not running (stale PID cleaned up).")
         return
 

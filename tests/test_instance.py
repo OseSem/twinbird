@@ -183,6 +183,35 @@ class TestDown:
 
         mock_unregister.assert_called_once_with("office")
 
+    def test_unregisters_service_on_stale_pid(self, tmp_path: Path) -> None:
+        from twinbird.instance import down
+
+        platform = _mock_platform(tmp_path)
+        ensure_instance_dir(tmp_path, "office")
+        meta = InstanceMetadata(
+            "office",
+            "url",
+            "tcp://127.0.0.1:52200",
+            "wt7",
+            42,
+            "t",
+            service_registered=True,
+        )
+        write_metadata(tmp_path, meta)
+        write_pid(tmp_path, "office", 42)
+        mock_unregister = MagicMock()
+
+        with (
+            patch("twinbird.instance.get_platform_config", return_value=platform),
+            patch("twinbird.instance.find_netbird_bin", return_value="netbird"),
+            patch("twinbird.instance.read_pid", return_value=42),
+            patch("twinbird.instance.is_process_alive", return_value=False),
+            patch("twinbird.instance.unregister_service", mock_unregister),
+        ):
+            down("office")
+
+        mock_unregister.assert_called_once_with("office")
+
 
 class TestListAll:
     def test_no_instances(self, tmp_path: Path, capsys) -> None:
