@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -153,7 +154,7 @@ def _register_linux(
     unit_dir.mkdir(parents=True, exist_ok=True)
 
     cmd_parts = _build_netbird_cmd(netbird_bin, config_dir, daemon_addr, log_file)
-    exec_start = " ".join(cmd_parts)
+    exec_start = " ".join(shlex.quote(part) for part in cmd_parts)
 
     unit_path = _systemd_unit_path(name)
     unit_path.write_text(
@@ -173,7 +174,9 @@ def _register_linux(
         check=False,
     )
     if reload_result.returncode != 0 or enable_result.returncode != 0:
-        stderr = reload_result.stderr or enable_result.stderr
+        stderr = " | ".join(
+            s for s in (reload_result.stderr, enable_result.stderr) if s
+        )
         typer.echo(
             f"Warning: failed to register service for '{name}': {stderr}",
             err=True,
