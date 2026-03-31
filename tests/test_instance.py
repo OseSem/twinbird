@@ -101,9 +101,7 @@ class TestDown:
 
         import click
 
-        with (
-            patch("twinbird.instance.get_platform_config", return_value=platform),
-        ):
+        with patch("twinbird.instance.get_platform_config", return_value=platform):
             try:
                 down("nonexistent")
                 raise AssertionError("Should have raised SystemExit")
