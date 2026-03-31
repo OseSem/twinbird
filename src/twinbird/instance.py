@@ -26,7 +26,7 @@ from twinbird.platform import (
 def up(
     name: str,
     management_url: str,
-    setup_key: str,
+    setup_key: str | None = None,
     interface_name: str | None = None,
     daemon_addr: str | None = None,
 ) -> None:

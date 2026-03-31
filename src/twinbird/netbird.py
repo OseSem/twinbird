@@ -63,7 +63,7 @@ def run_up(
     netbird_bin: str,
     daemon_addr: str,
     management_url: str,
-    setup_key: str,
+    setup_key: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     cmd = [
         netbird_bin,
@@ -72,9 +72,12 @@ def run_up(
         daemon_addr,
         "--management-url",
         management_url,
-        "--setup-key",
-        setup_key,
     ]
+    if setup_key:
+        cmd += [
+            "--setup-key",
+            setup_key,
+        ]
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
