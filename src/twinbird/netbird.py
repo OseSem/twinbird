@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def find_netbird_bin() -> str:
@@ -20,7 +21,7 @@ def run_service(
     config_dir: Path,
     daemon_addr: str,
     interface_name: str,
-) -> subprocess.Popen[bytes]:
+) -> subprocess.Popen[Any]:
     log_file = config_dir / "daemon.log"
     cmd = [
         netbird_bin,
@@ -36,7 +37,7 @@ def run_service(
         interface_name,
     ]
 
-    kwargs: dict = {
+    kwargs: dict[str, Any] = {
         "stdout": subprocess.DEVNULL,
         "stderr": subprocess.DEVNULL,
     }
