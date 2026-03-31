@@ -76,7 +76,10 @@ def run_up(
         cmd += ["--setup-key", setup_key]
     if interface_name:
         cmd += ["--interface-name", interface_name]
-    return subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if setup_key:
+        return subprocess.run(cmd, capture_output=True, text=True, check=False)
+    # No setup key = interactive OAuth flow, let user see output
+    return subprocess.run(cmd, text=True, check=False)
 
 
 def run_down(
