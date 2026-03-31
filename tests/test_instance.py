@@ -37,6 +37,7 @@ class TestUp:
                 return_value="tcp://127.0.0.1:52200",
             ),
             patch("twinbird.instance.derive_interface_name", return_value="wt7"),
+            patch("twinbird.instance.register_service"),
         ):
             up(
                 name="office",
@@ -73,6 +74,46 @@ class TestUp:
         captured = capsys.readouterr()
         assert "already running" in captured.out
 
+    def test_registers_service_on_up(self, tmp_path: Path) -> None:
+        from twinbird.instance import up
+
+        platform = _mock_platform(tmp_path)
+        mock_register = MagicMock()
+
+        with (
+            patch("twinbird.instance.get_platform_config", return_value=platform),
+            patch("twinbird.instance.find_netbird_bin", return_value="netbird"),
+            patch("twinbird.instance.start_daemon", return_value=42),
+            patch("twinbird.instance.read_pid", return_value=None),
+            patch(
+                "twinbird.instance.run_up",
+                return_value=MagicMock(returncode=0, stdout="Connected"),
+            ),
+            patch(
+                "twinbird.instance.derive_daemon_addr",
+                return_value="tcp://127.0.0.1:52200",
+            ),
+            patch("twinbird.instance.derive_interface_name", return_value="wt7"),
+            patch("twinbird.instance.register_service", mock_register),
+        ):
+            up(
+                name="office",
+                management_url="https://mgmt.example.com",
+                setup_key="KEY123",
+            )
+
+        mock_register.assert_called_once_with(
+            name="office",
+            netbird_bin="netbird",
+            config_dir=tmp_path / "office",
+            daemon_addr="tcp://127.0.0.1:52200",
+            log_file=tmp_path / "office" / "daemon.log",
+        )
+
+        metadata = read_metadata(tmp_path, "office")
+        assert metadata is not None
+        assert metadata.service_registered is True
+
 
 class TestDown:
     def test_stops_instance(self, tmp_path: Path) -> None:
@@ -93,6 +134,7 @@ class TestDown:
             patch("twinbird.instance.is_process_alive", return_value=True),
             patch("twinbird.instance.run_down", return_value=MagicMock(returncode=0)),
             patch("twinbird.instance.stop_daemon"),
+            patch("twinbird.instance.unregister_service"),
         ):
             down("office")
 
@@ -109,6 +151,37 @@ class TestDown:
                 raise AssertionError("Should have raised SystemExit")
             except (SystemExit, click.exceptions.Exit):
                 pass
+
+    def test_unregisters_service_on_down(self, tmp_path: Path) -> None:
+        from twinbird.instance import down
+
+        platform = _mock_platform(tmp_path)
+        ensure_instance_dir(tmp_path, "office")
+        meta = InstanceMetadata(
+            "office",
+            "url",
+            "tcp://127.0.0.1:52200",
+            "wt7",
+            42,
+            "t",
+            service_registered=True,
+        )
+        write_metadata(tmp_path, meta)
+        write_pid(tmp_path, "office", 42)
+        mock_unregister = MagicMock()
+
+        with (
+            patch("twinbird.instance.get_platform_config", return_value=platform),
+            patch("twinbird.instance.find_netbird_bin", return_value="netbird"),
+            patch("twinbird.instance.read_pid", return_value=42),
+            patch("twinbird.instance.is_process_alive", return_value=True),
+            patch("twinbird.instance.run_down", return_value=MagicMock(returncode=0)),
+            patch("twinbird.instance.stop_daemon"),
+            patch("twinbird.instance.unregister_service", mock_unregister),
+        ):
+            down("office")
+
+        mock_unregister.assert_called_once_with("office")
 
 
 class TestListAll:

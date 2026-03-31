@@ -21,6 +21,7 @@ from twinbird.platform import (
     derive_interface_name,
     get_platform_config,
 )
+from twinbird.service import register_service, unregister_service
 
 
 def up(
@@ -67,6 +68,15 @@ def up(
         typer.echo(f"Failed to connect: {result.stderr}", err=True)
         raise typer.Exit(1)
 
+    log_file = config_dir / "daemon.log"
+    register_service(
+        name=name,
+        netbird_bin=netbird_bin,
+        config_dir=config_dir,
+        daemon_addr=resolved_addr,
+        log_file=log_file,
+    )
+
     metadata = InstanceMetadata(
         name=name,
         management_url=management_url,
@@ -74,6 +84,7 @@ def up(
         interface_name=resolved_iface,
         pid=daemon_pid,
         created_at=datetime.now(timezone.utc).isoformat(),
+        service_registered=True,
     )
     write_metadata(platform.config_root, metadata)
     typer.echo(
@@ -94,6 +105,7 @@ def down(name: str) -> None:
 
     if pid is None:
         typer.echo(f"No daemon PID found for '{name}', disconnecting client...")
+        unregister_service(name)
         run_down(netbird_bin, metadata.daemon_addr)
         typer.echo(f"Instance '{name}' is down.")
         return
@@ -103,6 +115,7 @@ def down(name: str) -> None:
         typer.echo(f"Instance '{name}' is not running (stale PID cleaned up).")
         return
 
+    unregister_service(name)
     typer.echo(f"Disconnecting instance '{name}'...")
     result = run_down(netbird_bin, metadata.daemon_addr)
     if result.returncode != 0:
