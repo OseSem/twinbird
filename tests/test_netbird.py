@@ -25,12 +25,19 @@ class TestFindNetbirdBin:
                 assert "TWINBIRD_NETBIRD_BIN" in str(e)
 
     def test_env_override(self) -> None:
-        with patch.dict("os.environ", {"TWINBIRD_NETBIRD_BIN": "/custom/netbird"}):
-            assert find_netbird_bin() == "/custom/netbird"
-
-    def test_env_override_skips_which_check(self) -> None:
         with (
-            patch("shutil.which", return_value=None),
+            patch("shutil.which", return_value="/custom/netbird"),
             patch.dict("os.environ", {"TWINBIRD_NETBIRD_BIN": "/custom/netbird"}),
         ):
             assert find_netbird_bin() == "/custom/netbird"
+
+    def test_env_override_not_found(self) -> None:
+        with (
+            patch("shutil.which", return_value=None),
+            patch.dict("os.environ", {"TWINBIRD_NETBIRD_BIN": "/bad/path"}),
+        ):
+            try:
+                find_netbird_bin()
+                raise AssertionError("Should have raised FileNotFoundError")
+            except FileNotFoundError as e:
+                assert "TWINBIRD_NETBIRD_BIN" in str(e)

@@ -15,11 +15,14 @@ def is_process_alive(pid: int) -> bool:
 
         kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
         handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if handle:
-            kernel32.CloseHandle(handle)
-            return True
-        return False
+        if not handle:
+            return False
+        exit_code = ctypes.c_ulong()
+        kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
+        kernel32.CloseHandle(handle)
+        return exit_code.value == STILL_ACTIVE
 
     try:
         os.kill(pid, 0)

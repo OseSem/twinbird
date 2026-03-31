@@ -83,16 +83,24 @@ def down(name: str) -> None:
         typer.echo(f"Instance '{name}' not found.", err=True)
         raise typer.Exit(1)
 
+    netbird_bin = find_netbird_bin()
     pid = read_pid(platform.config_root, name)
-    if pid and not is_process_alive(pid):
+
+    if pid is None:
+        typer.echo(f"No daemon PID found for '{name}', disconnecting client...")
+        run_down(netbird_bin, metadata.daemon_addr)
+        typer.echo(f"Instance '{name}' is down.")
+        return
+
+    if not is_process_alive(pid):
         remove_pid(platform.config_root, name)
         typer.echo(f"Instance '{name}' is not running (stale PID cleaned up).")
         return
 
-    netbird_bin = find_netbird_bin()
-
     typer.echo(f"Disconnecting instance '{name}'...")
-    run_down(netbird_bin, metadata.daemon_addr)
+    result = run_down(netbird_bin, metadata.daemon_addr)
+    if result.returncode != 0:
+        typer.echo(f"Warning: disconnect failed: {result.stderr}", err=True)
 
     typer.echo(f"Stopping daemon (PID {pid})...")
     stop_daemon(platform.config_root, name)
