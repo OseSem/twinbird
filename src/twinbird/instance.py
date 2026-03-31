@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import typer
+
+from twinbird.config import (
+    InstanceMetadata,
+    ensure_instance_dir,
+    list_instances,
+    read_metadata,
+    read_pid,
+    remove_pid,
+    write_metadata,
+)
+from twinbird.daemon import is_process_alive, start_daemon, stop_daemon
+from twinbird.netbird import find_netbird_bin, run_down, run_status, run_up
+from twinbird.platform import (
+    PlatformConfig,
+    derive_daemon_addr,
+    derive_interface_name,
+    get_platform_config,
+)
+
+
+def up(
+    name: str,
+    management_url: str,
+    setup_key: str,
+    interface_name: str | None = None,
+    daemon_addr: str | None = None,
+) -> None:
+    netbird_bin = find_netbird_bin()
+    platform = get_platform_config()
+    config_dir = ensure_instance_dir(platform.config_root, name)
+
+    resolved_addr = daemon_addr or derive_daemon_addr(name, platform)
+    resolved_iface = interface_name or derive_interface_name(name, platform)
+
+    pid = read_pid(platform.config_root, name)
+    if pid and is_process_alive(pid):
+        typer.echo(f"Instance '{name}' is already running (PID {pid}).")
+        return
+
+    if pid:
+        remove_pid(platform.config_root, name)
+
+    typer.echo(f"Starting daemon for instance '{name}'...")
+    daemon_pid = start_daemon(
+        netbird_bin=netbird_bin,
+        config_dir=config_dir,
+        daemon_addr=resolved_addr,
+        interface_name=resolved_iface,
+        config_root=platform.config_root,
+        name=name,
+    )
+
+    typer.echo(f"Connecting to {management_url}...")
+    result = run_up(netbird_bin, resolved_addr, management_url, setup_key)
+    if result.returncode != 0:
+        typer.echo(f"Failed to connect: {result.stderr}", err=True)
+        raise typer.Exit(1)
+
+    metadata = InstanceMetadata(
+        name=name,
+        management_url=management_url,
+        daemon_addr=resolved_addr,
+        interface_name=resolved_iface,
+        pid=daemon_pid,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    write_metadata(platform.config_root, metadata)
+    typer.echo(
+        f"Instance '{name}' is up (PID {daemon_pid}, interface {resolved_iface})."
+    )
+
+
+def down(name: str) -> None:
+    platform = get_platform_config()
+    metadata = read_metadata(platform.config_root, name)
+
+    if metadata is None:
+        typer.echo(f"Instance '{name}' not found.", err=True)
+        raise typer.Exit(1)
+
+    pid = read_pid(platform.config_root, name)
+    if pid and not is_process_alive(pid):
+        remove_pid(platform.config_root, name)
+        typer.echo(f"Instance '{name}' is not running (stale PID cleaned up).")
+        return
+
+    netbird_bin = find_netbird_bin()
+
+    typer.echo(f"Disconnecting instance '{name}'...")
+    run_down(netbird_bin, metadata.daemon_addr)
+
+    typer.echo(f"Stopping daemon (PID {pid})...")
+    stop_daemon(platform.config_root, name)
+
+    typer.echo(f"Instance '{name}' is down.")
+
+
+def status(name: str | None = None) -> None:
+    platform = get_platform_config()
+
+    if name:
+        _show_instance_status(name, platform)
+    else:
+        instances = list_instances(platform.config_root)
+        if not instances:
+            typer.echo("No instances found.")
+            return
+        for inst_name in instances:
+            _show_instance_status(inst_name, platform)
+
+
+def _show_instance_status(name: str, platform: PlatformConfig) -> None:
+    metadata = read_metadata(platform.config_root, name)
+    if metadata is None:
+        typer.echo(f"{name}: not found")
+        return
+
+    pid = read_pid(platform.config_root, name)
+    alive = pid is not None and is_process_alive(pid)
+
+    if alive:
+        netbird_bin = find_netbird_bin()
+        result = run_status(netbird_bin, metadata.daemon_addr)
+        typer.echo(f"--- {name} (PID {pid}) ---")
+        typer.echo(result.stdout or result.stderr)
+    else:
+        typer.echo(f"--- {name} (stopped) ---")
+
+
+def list_all() -> None:
+    platform = get_platform_config()
+    instances = list_instances(platform.config_root)
+
+    if not instances:
+        typer.echo("No instances found.")
+        return
+
+    for name in instances:
+        pid = read_pid(platform.config_root, name)
+        alive = pid is not None and is_process_alive(pid)
+        state = "running" if alive else "stopped"
+        typer.echo(f"{name}: {state}")
