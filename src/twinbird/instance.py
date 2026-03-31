@@ -169,7 +169,10 @@ def list_all() -> None:
         return
 
     for name in instances:
+        metadata = read_metadata(platform.config_root, name)
         pid = read_pid(platform.config_root, name)
         alive = pid is not None and is_process_alive(pid)
         state = "running" if alive else "stopped"
+        if alive and metadata and metadata.service_registered:
+            state = "running (persistent)"
         typer.echo(f"{name}: {state}")

@@ -224,3 +224,44 @@ class TestListAll:
 
         captured = capsys.readouterr()
         assert "No instances found" in captured.out
+
+    def test_shows_persistent_label(self, tmp_path: Path, capsys) -> None:
+        from twinbird.instance import list_all
+
+        platform = _mock_platform(tmp_path)
+        ensure_instance_dir(tmp_path, "office")
+        meta = InstanceMetadata(
+            "office", "url", "addr", "wt7", 42, "t", service_registered=True
+        )
+        write_metadata(tmp_path, meta)
+        write_pid(tmp_path, "office", 42)
+
+        with (
+            patch("twinbird.instance.get_platform_config", return_value=platform),
+            patch("twinbird.instance.is_process_alive", return_value=True),
+        ):
+            list_all()
+
+        captured = capsys.readouterr()
+        assert "office: running (persistent)" in captured.out
+
+    def test_shows_running_without_persistent(self, tmp_path: Path, capsys) -> None:
+        from twinbird.instance import list_all
+
+        platform = _mock_platform(tmp_path)
+        ensure_instance_dir(tmp_path, "office")
+        meta = InstanceMetadata(
+            "office", "url", "addr", "wt7", 42, "t", service_registered=False
+        )
+        write_metadata(tmp_path, meta)
+        write_pid(tmp_path, "office", 42)
+
+        with (
+            patch("twinbird.instance.get_platform_config", return_value=platform),
+            patch("twinbird.instance.is_process_alive", return_value=True),
+        ):
+            list_all()
+
+        captured = capsys.readouterr()
+        assert "office: running" in captured.out
+        assert "persistent" not in captured.out
