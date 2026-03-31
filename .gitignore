@@ -35,6 +35,7 @@ coverage.xml
 
 # uv (lock not committed for libraries/packages)
 uv.lock
+.python-version
 
 # Ruff
 .ruff_cache/
