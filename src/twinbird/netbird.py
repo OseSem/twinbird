@@ -34,14 +34,14 @@ def run_service(
         "service",
         "run",
         "--config",
-        str(config_dir),
+        str(config_dir / "config.json"),
         "--daemon-addr",
         daemon_addr,
         "--log-file",
         str(log_file),
     ]
 
-    log_handle = open(log_file, "a")  # noqa: SIM115
+    log_handle = open(log_file, "w")  # noqa: SIM115
     kwargs: dict[str, Any] = {
         "stdout": log_handle,
         "stderr": log_handle,
