@@ -118,7 +118,28 @@ def _is_registered_windows(name: str) -> bool:
 
 
 # --- Linux: systemd user unit ---
-# (stub — implemented in Task 3)
+
+
+def _systemd_unit_dir() -> Path:
+    return Path.home() / ".config" / "systemd" / "user"
+
+
+def _systemd_unit_path(name: str) -> Path:
+    return _systemd_unit_dir() / f"twinbird-{name}.service"
+
+
+_SYSTEMD_UNIT_TEMPLATE = """\
+[Unit]
+Description=Twinbird instance: {name}
+
+[Service]
+ExecStart={exec_start}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
 
 
 def _register_linux(
@@ -128,15 +149,63 @@ def _register_linux(
     daemon_addr: str,
     log_file: Path,
 ) -> None:
-    pass
+    unit_dir = _systemd_unit_dir()
+    unit_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd_parts = _build_netbird_cmd(netbird_bin, config_dir, daemon_addr, log_file)
+    exec_start = " ".join(cmd_parts)
+
+    unit_path = _systemd_unit_path(name)
+    unit_path.write_text(
+        _SYSTEMD_UNIT_TEMPLATE.format(name=name, exec_start=exec_start)
+    )
+
+    reload_result = subprocess.run(
+        ["systemctl", "--user", "daemon-reload"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    enable_result = subprocess.run(
+        ["systemctl", "--user", "enable", f"twinbird-{name}.service"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if reload_result.returncode != 0 or enable_result.returncode != 0:
+        stderr = reload_result.stderr or enable_result.stderr
+        typer.echo(
+            f"Warning: failed to register service for '{name}': {stderr}",
+            err=True,
+        )
 
 
 def _unregister_linux(name: str) -> None:
-    pass
+    subprocess.run(
+        ["systemctl", "--user", "disable", f"twinbird-{name}.service"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    unit_path = _systemd_unit_path(name)
+    if unit_path.exists():
+        unit_path.unlink()
+    subprocess.run(
+        ["systemctl", "--user", "daemon-reload"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def _is_registered_linux(name: str) -> bool:
-    return False
+    result = subprocess.run(
+        ["systemctl", "--user", "is-enabled", f"twinbird-{name}.service"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
 
 
 # --- macOS: launchd user agent ---

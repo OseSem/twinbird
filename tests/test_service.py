@@ -101,3 +101,116 @@ class TestWindowsIsRegistered:
             patch("twinbird.service.subprocess.run", mock_run),
         ):
             assert is_service_registered("office") is False
+
+
+class TestLinuxRegister:
+    def test_writes_unit_file_and_enables(self, tmp_path: Path) -> None:
+        from twinbird.service import register_service
+
+        unit_dir = tmp_path / ".config" / "systemd" / "user"
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch("twinbird.service.sys.platform", "linux"),
+            patch("twinbird.service.Path.home", return_value=tmp_path),
+            patch("twinbird.service.subprocess.run", mock_run),
+        ):
+            register_service(
+                name="office",
+                netbird_bin="/usr/bin/netbird",
+                config_dir=Path("/home/user/.config/twinbird/office"),
+                daemon_addr="unix:///home/user/.config/twinbird/office/office.sock",
+                log_file=Path("/home/user/.config/twinbird/office/daemon.log"),
+            )
+
+        unit_file = unit_dir / "twinbird-office.service"
+        assert unit_file.exists()
+        content = unit_file.read_text()
+        assert "ExecStart=/usr/bin/netbird service run" in content
+        assert (
+            "--daemon-addr unix:///home/user/.config/twinbird/office/office.sock"
+            in content
+        )
+        assert "WantedBy=default.target" in content
+
+        assert mock_run.call_count == 2  # daemon-reload + enable
+        cmds = [c[0][0] for c in mock_run.call_args_list]
+        assert ["systemctl", "--user", "daemon-reload"] in cmds
+        assert ["systemctl", "--user", "enable", "twinbird-office.service"] in cmds
+
+    def test_register_warns_on_failure(self, tmp_path: Path, capsys) -> None:
+        from twinbird.service import register_service
+
+        mock_run = MagicMock(
+            return_value=MagicMock(returncode=1, stderr="Failed to enable")
+        )
+        with (
+            patch("twinbird.service.sys.platform", "linux"),
+            patch("twinbird.service.Path.home", return_value=tmp_path),
+            patch("twinbird.service.subprocess.run", mock_run),
+        ):
+            register_service(
+                name="office",
+                netbird_bin="/usr/bin/netbird",
+                config_dir=Path("/tmp/twinbird/office"),
+                daemon_addr="unix:///tmp/office.sock",
+                log_file=Path("/tmp/twinbird/office/daemon.log"),
+            )
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err
+
+
+class TestLinuxUnregister:
+    def test_disables_and_removes_unit_file(self, tmp_path: Path) -> None:
+        from twinbird.service import unregister_service
+
+        unit_dir = tmp_path / ".config" / "systemd" / "user"
+        unit_dir.mkdir(parents=True)
+        unit_file = unit_dir / "twinbird-office.service"
+        unit_file.write_text("[Unit]\nDescription=test\n")
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+        with (
+            patch("twinbird.service.sys.platform", "linux"),
+            patch("twinbird.service.Path.home", return_value=tmp_path),
+            patch("twinbird.service.subprocess.run", mock_run),
+        ):
+            unregister_service("office")
+
+        assert not unit_file.exists()
+        cmds = [c[0][0] for c in mock_run.call_args_list]
+        assert ["systemctl", "--user", "disable", "twinbird-office.service"] in cmds
+        assert ["systemctl", "--user", "daemon-reload"] in cmds
+
+    def test_unregister_idempotent_no_file(self, tmp_path: Path) -> None:
+        from twinbird.service import unregister_service
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+        with (
+            patch("twinbird.service.sys.platform", "linux"),
+            patch("twinbird.service.Path.home", return_value=tmp_path),
+            patch("twinbird.service.subprocess.run", mock_run),
+        ):
+            unregister_service("office")  # should not raise
+
+
+class TestLinuxIsRegistered:
+    def test_returns_true_when_enabled(self) -> None:
+        from twinbird.service import is_service_registered
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+        with (
+            patch("twinbird.service.sys.platform", "linux"),
+            patch("twinbird.service.subprocess.run", mock_run),
+        ):
+            assert is_service_registered("office") is True
+
+    def test_returns_false_when_not_enabled(self) -> None:
+        from twinbird.service import is_service_registered
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=1))
+        with (
+            patch("twinbird.service.sys.platform", "linux"),
+            patch("twinbird.service.subprocess.run", mock_run),
+        ):
+            assert is_service_registered("office") is False
