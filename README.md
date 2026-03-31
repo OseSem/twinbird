@@ -4,21 +4,15 @@ Manage multiple [NetBird](https://netbird.io) instances on a single machine with
 
 ## Install
 
-### uv (recommended)
-
 ```bash
 uv tool install twinbird
 ```
 
-This installs `twinbird` in an isolated environment and adds it to your PATH automatically.
-
-### pip
+or
 
 ```bash
 pip install twinbird
 ```
-
-The `twinbird` command is added to your Python environment's `Scripts/` (Windows) or `bin/` (Linux/macOS) directory. This is typically already on PATH if you installed Python with the "Add to PATH" option, or if you're installing into an active virtual environment.
 
 ## Usage
 
