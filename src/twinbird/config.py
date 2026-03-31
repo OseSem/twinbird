@@ -13,6 +13,7 @@ class InstanceMetadata:
     interface_name: str
     pid: int
     created_at: str
+    service_registered: bool = False
 
 
 def instance_dir(config_root: Path, name: str) -> Path:
@@ -35,6 +36,7 @@ def read_metadata(config_root: Path, name: str) -> InstanceMetadata | None:
     if not path.exists():
         return None
     data = json.loads(path.read_text())
+    data.setdefault("service_registered", False)
     return InstanceMetadata(**data)
 
 

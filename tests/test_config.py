@@ -57,6 +57,28 @@ class TestMetadata:
     def test_read_not_found(self, tmp_path: Path) -> None:
         assert read_metadata(tmp_path, "nonexistent") is None
 
+    def test_backward_compat_no_service_registered(self, tmp_path: Path) -> None:
+        """Existing instance.json without service_registered loads with False."""
+        ensure_instance_dir(tmp_path, "old")
+        path = tmp_path / "old" / "instance.json"
+        import json
+
+        path.write_text(
+            json.dumps(
+                {
+                    "name": "old",
+                    "management_url": "https://mgmt.example.com",
+                    "daemon_addr": "tcp://127.0.0.1:52200",
+                    "interface_name": "wt7",
+                    "pid": 123,
+                    "created_at": "2026-03-31T00:00:00+00:00",
+                }
+            )
+        )
+        loaded = read_metadata(tmp_path, "old")
+        assert loaded is not None
+        assert loaded.service_registered is False
+
     def test_overwrite(self, tmp_path: Path) -> None:
         ensure_instance_dir(tmp_path, "office")
         meta1 = self._sample_metadata()
