@@ -73,9 +73,8 @@ def _register_windows(
     daemon_addr: str,
     log_file: Path,
 ) -> None:
-    cmd_str = " ".join(
-        _build_netbird_cmd(netbird_bin, config_dir, daemon_addr, log_file)
-    )
+    parts = _build_netbird_cmd(netbird_bin, config_dir, daemon_addr, log_file)
+    cmd_str = " ".join(f'"{part}"' for part in parts)
     result = subprocess.run(
         [
             "schtasks",
