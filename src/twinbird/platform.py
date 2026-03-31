@@ -14,10 +14,9 @@ class PlatformConfig:
 
 
 def _is_root() -> bool:
-    try:
-        return os.getuid() == 0
-    except AttributeError:
-        return False
+    if hasattr(os, "getuid"):
+        return os.getuid() == 0  # type: ignore[attr-defined]
+    return False
 
 
 def get_platform_config() -> PlatformConfig:
