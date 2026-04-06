@@ -5,13 +5,14 @@ from unittest.mock import MagicMock, patch
 
 
 class TestWindowsRegister:
-    def test_creates_scheduled_task(self) -> None:
+    def test_creates_scheduled_task_directly(self, tmp_path: Path) -> None:
         from twinbird.service import register_service
 
         mock_run = MagicMock(return_value=MagicMock(returncode=0))
         with (
             patch("twinbird.service.sys.platform", "win32"),
             patch("twinbird.service.subprocess.run", mock_run),
+            patch("twinbird.service.tempfile.gettempdir", return_value=str(tmp_path)),
         ):
             register_service(
                 name="office",
@@ -27,19 +28,54 @@ class TestWindowsRegister:
         cmd = mock_run.call_args[0][0]
         assert cmd[0] == "schtasks"
         assert "/create" in cmd
+        assert "/xml" in cmd
         assert "twinbird-office" in cmd
-        assert "/sc" in cmd
-        assert "ONLOGON" in cmd
 
-    def test_register_warns_on_failure(self, capsys) -> None:
+    def test_elevates_when_access_denied(self, tmp_path: Path) -> None:
         from twinbird.service import register_service
 
         mock_run = MagicMock(
-            return_value=MagicMock(returncode=1, stderr="access denied")
+            side_effect=[
+                MagicMock(returncode=1, stderr="access denied"),  # direct create
+                MagicMock(returncode=0),  # powershell elevation
+                MagicMock(returncode=0),  # _is_registered query
+            ]
         )
         with (
             patch("twinbird.service.sys.platform", "win32"),
             patch("twinbird.service.subprocess.run", mock_run),
+            patch("twinbird.service.tempfile.gettempdir", return_value=str(tmp_path)),
+        ):
+            register_service(
+                name="office",
+                netbird_bin="netbird",
+                config_dir=Path("C:/Users/user/AppData/Roaming/twinbird/office"),
+                daemon_addr="tcp://127.0.0.1:52200",
+                log_file=Path(
+                    "C:/Users/user/AppData/Roaming/twinbird/office/daemon.log"
+                ),
+            )
+
+        assert mock_run.call_count == 3
+        # Second call should be powershell elevation
+        ps_cmd = mock_run.call_args_list[1][0][0]
+        assert ps_cmd[0] == "powershell"
+        assert "RunAs" in ps_cmd[2]
+
+    def test_register_warns_on_failure(self, tmp_path: Path, capsys) -> None:
+        from twinbird.service import register_service
+
+        mock_run = MagicMock(
+            side_effect=[
+                MagicMock(returncode=1, stderr="access denied"),  # direct create
+                MagicMock(returncode=0),  # powershell elevation
+                MagicMock(returncode=1),  # _is_registered query -> still not there
+            ]
+        )
+        with (
+            patch("twinbird.service.sys.platform", "win32"),
+            patch("twinbird.service.subprocess.run", mock_run),
+            patch("twinbird.service.tempfile.gettempdir", return_value=str(tmp_path)),
         ):
             register_service(
                 name="office",
@@ -51,9 +87,30 @@ class TestWindowsRegister:
         captured = capsys.readouterr()
         assert "Warning" in captured.err
 
+    def test_xml_contains_highest_run_level(self, tmp_path: Path) -> None:
+        from twinbird.service import _build_netbird_cmd, _write_task_xml
+
+        parts = _build_netbird_cmd(
+            "netbird",
+            Path("C:/config/office"),
+            "tcp://127.0.0.1:52200",
+            Path("C:/config/office/daemon.log"),
+        )
+        with patch("twinbird.service.tempfile.gettempdir", return_value=str(tmp_path)):
+            xml_file = _write_task_xml("office", parts)
+
+        content = xml_file.read_text(encoding="utf-16")
+        assert "<RunLevel>HighestAvailable</RunLevel>" in content
+        assert (
+            "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" in content
+        )
+        assert "<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>" in content
+        assert "<Command>netbird</Command>" in content
+        xml_file.unlink()
+
 
 class TestWindowsUnregister:
-    def test_deletes_scheduled_task(self) -> None:
+    def test_deletes_scheduled_task_directly(self) -> None:
         from twinbird.service import unregister_service
 
         mock_run = MagicMock(return_value=MagicMock(returncode=0))
@@ -70,15 +127,44 @@ class TestWindowsUnregister:
         assert "twinbird-office" in cmd
         assert "/f" in cmd
 
+    def test_elevates_when_access_denied(self) -> None:
+        from twinbird.service import unregister_service
+
+        mock_run = MagicMock(
+            side_effect=[
+                MagicMock(returncode=1, stderr="access denied"),  # direct delete
+                MagicMock(returncode=0),  # _is_registered query -> exists
+                MagicMock(returncode=0),  # powershell elevation
+            ]
+        )
+        with (
+            patch("twinbird.service.sys.platform", "win32"),
+            patch("twinbird.service.subprocess.run", mock_run),
+        ):
+            unregister_service("office")
+
+        assert mock_run.call_count == 3
+        ps_cmd = mock_run.call_args_list[2][0][0]
+        assert ps_cmd[0] == "powershell"
+        assert "RunAs" in ps_cmd[2]
+
     def test_unregister_idempotent(self) -> None:
         from twinbird.service import unregister_service
 
-        mock_run = MagicMock(return_value=MagicMock(returncode=1, stderr="not found"))
+        mock_run = MagicMock(
+            side_effect=[
+                MagicMock(returncode=1, stderr="not found"),  # direct delete
+                MagicMock(returncode=1),  # _is_registered query -> doesn't exist
+            ]
+        )
         with (
             patch("twinbird.service.sys.platform", "win32"),
             patch("twinbird.service.subprocess.run", mock_run),
         ):
             unregister_service("office")  # should not raise
+
+        # Should not attempt elevation since task doesn't exist
+        assert mock_run.call_count == 2
 
 
 class TestWindowsIsRegistered:

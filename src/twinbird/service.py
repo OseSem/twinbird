@@ -3,6 +3,7 @@ from __future__ import annotations
 import shlex
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import typer
@@ -66,6 +67,64 @@ def is_service_registered(name: str) -> bool:
 
 # --- Windows: Task Scheduler ---
 
+_TASK_XML_TEMPLATE = """\
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <RunLevel>HighestAvailable</RunLevel>
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions>
+    <Exec>
+      <Command>{command}</Command>
+      <Arguments>{arguments}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"""
+
+
+def _request_elevation(command_line: str) -> None:
+    """Run a command line with UAC elevation via PowerShell."""
+    subprocess.run(
+        [
+            "powershell",
+            "-Command",
+            f"Start-Process cmd.exe -ArgumentList '/c {command_line}' "
+            "-Verb RunAs -Wait -WindowStyle Hidden",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def _write_task_xml(name: str, parts: list[str]) -> Path:
+    """Write a Task Scheduler XML definition to a temp file and return its path."""
+    from xml.sax.saxutils import escape as xml_escape
+
+    xml_content = _TASK_XML_TEMPLATE.format(
+        command=xml_escape(parts[0]),
+        arguments=xml_escape(subprocess.list2cmdline(parts[1:])),
+    )
+    xml_file = Path(tempfile.gettempdir()) / f"twinbird-{name}.xml"
+    xml_file.write_text(xml_content, encoding="utf-16")
+    return xml_file
+
 
 def _register_windows(
     name: str,
@@ -75,37 +134,44 @@ def _register_windows(
     log_file: Path,
 ) -> None:
     parts = _build_netbird_cmd(netbird_bin, config_dir, daemon_addr, log_file)
-    cmd_str = " ".join(f'"{part}"' for part in parts)
-    result = subprocess.run(
-        [
-            "schtasks",
-            "/create",
-            "/tn",
-            _task_name(name),
-            "/tr",
-            cmd_str,
-            "/sc",
-            "ONLOGON",
-            "/f",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        typer.echo(
-            f"Warning: failed to register service for '{name}': {result.stderr}",
-            err=True,
+    task_name = _task_name(name)
+    xml_file = _write_task_xml(name, parts)
+
+    try:
+        result = subprocess.run(
+            ["schtasks", "/create", "/tn", task_name, "/xml", str(xml_file), "/f"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
+        if result.returncode == 0:
+            return
+
+        typer.echo("Requesting administrator privileges to register startup task...")
+        _request_elevation(f'schtasks /create /tn "{task_name}" /xml "{xml_file}" /f')
+
+        if not _is_registered_windows(name):
+            typer.echo(
+                f"Warning: failed to register startup task for '{name}'.",
+                err=True,
+            )
+    finally:
+        xml_file.unlink(missing_ok=True)
 
 
 def _unregister_windows(name: str) -> None:
-    subprocess.run(
-        ["schtasks", "/delete", "/tn", _task_name(name), "/f"],
+    task_name = _task_name(name)
+    result = subprocess.run(
+        ["schtasks", "/delete", "/tn", task_name, "/f"],
         capture_output=True,
         text=True,
         check=False,
     )
+    if result.returncode == 0:
+        return
+
+    if _is_registered_windows(name):
+        _request_elevation(f'schtasks /delete /tn "{task_name}" /f')
 
 
 def _is_registered_windows(name: str) -> bool:
