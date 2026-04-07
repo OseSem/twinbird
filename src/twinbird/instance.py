@@ -21,7 +21,7 @@ from twinbird.platform import (
     derive_interface_name,
     get_platform_config,
 )
-from twinbird.service import register_service, unregister_service
+from twinbird.service import is_service_registered, register_service, unregister_service
 
 
 def up(
@@ -42,6 +42,17 @@ def up(
     if pid and is_process_alive(pid):
         metadata = read_metadata(platform.config_root, name)
         if metadata:
+            if not is_service_registered(name):
+                log_file = config_dir / "daemon.log"
+                register_service(
+                    name=name,
+                    netbird_bin=netbird_bin,
+                    config_dir=config_dir,
+                    daemon_addr=metadata.daemon_addr,
+                    log_file=log_file,
+                )
+                metadata.service_registered = True
+                write_metadata(platform.config_root, metadata)
             typer.echo(f"Instance '{name}' is already running (PID {pid}).")
             return
         # PID exists but no metadata — leftover from a failed start, kill it
@@ -169,10 +180,9 @@ def list_all() -> None:
         return
 
     for name in instances:
-        metadata = read_metadata(platform.config_root, name)
         pid = read_pid(platform.config_root, name)
         alive = pid is not None and is_process_alive(pid)
         state = "running" if alive else "stopped"
-        if alive and metadata and metadata.service_registered:
+        if alive and is_service_registered(name):
             state = "running (persistent)"
         typer.echo(f"{name}: {state}")

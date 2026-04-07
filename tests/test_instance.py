@@ -56,7 +56,9 @@ class TestUp:
         platform = _mock_platform(tmp_path)
         ensure_instance_dir(tmp_path, "office")
         write_pid(tmp_path, "office", 42)
-        meta = InstanceMetadata("office", "url", "addr", "wt7", 42, "t")
+        meta = InstanceMetadata(
+            "office", "url", "addr", "wt7", 42, "t", service_registered=True
+        )
         write_metadata(tmp_path, meta)
 
         with (
@@ -64,6 +66,7 @@ class TestUp:
             patch("twinbird.instance.find_netbird_bin", return_value="netbird"),
             patch("twinbird.instance.is_process_alive", return_value=True),
             patch("twinbird.instance.read_pid", return_value=42),
+            patch("twinbird.instance.is_service_registered", return_value=True),
         ):
             up(
                 name="office",
@@ -73,6 +76,41 @@ class TestUp:
 
         captured = capsys.readouterr()
         assert "already running" in captured.out
+
+    def test_already_running_registers_missing_service(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        from twinbird.instance import up
+
+        platform = _mock_platform(tmp_path)
+        ensure_instance_dir(tmp_path, "office")
+        write_pid(tmp_path, "office", 42)
+        meta = InstanceMetadata(
+            "office", "url", "addr", "wt7", 42, "t", service_registered=False
+        )
+        write_metadata(tmp_path, meta)
+        mock_register = MagicMock()
+
+        with (
+            patch("twinbird.instance.get_platform_config", return_value=platform),
+            patch("twinbird.instance.find_netbird_bin", return_value="netbird"),
+            patch("twinbird.instance.is_process_alive", return_value=True),
+            patch("twinbird.instance.read_pid", return_value=42),
+            patch("twinbird.instance.is_service_registered", return_value=False),
+            patch("twinbird.instance.register_service", mock_register),
+        ):
+            up(
+                name="office",
+                management_url="https://mgmt.example.com",
+                setup_key="KEY123",
+            )
+
+        mock_register.assert_called_once()
+        captured = capsys.readouterr()
+        assert "already running" in captured.out
+        updated = read_metadata(tmp_path, "office")
+        assert updated is not None
+        assert updated.service_registered is True
 
     def test_registers_service_on_up(self, tmp_path: Path) -> None:
         from twinbird.instance import up
@@ -239,6 +277,7 @@ class TestListAll:
         with (
             patch("twinbird.instance.get_platform_config", return_value=platform),
             patch("twinbird.instance.is_process_alive", return_value=True),
+            patch("twinbird.instance.is_service_registered", return_value=True),
         ):
             list_all()
 
@@ -259,6 +298,7 @@ class TestListAll:
         with (
             patch("twinbird.instance.get_platform_config", return_value=platform),
             patch("twinbird.instance.is_process_alive", return_value=True),
+            patch("twinbird.instance.is_service_registered", return_value=False),
         ):
             list_all()
 
