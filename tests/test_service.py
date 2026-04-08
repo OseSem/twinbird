@@ -105,7 +105,9 @@ class TestWindowsRegister:
             "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" in content
         )
         assert "<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>" in content
-        assert "<Command>netbird</Command>" in content
+        assert "<Command>powershell.exe</Command>" in content
+        assert "<Hidden>true</Hidden>" in content
+        assert "netbird" in content
         xml_file.unlink()
 
 

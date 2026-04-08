@@ -11,9 +11,15 @@ from twinbird.config import (
     read_metadata,
     read_pid,
     remove_pid,
+    seed_netbird_config,
     write_metadata,
 )
-from twinbird.daemon import is_process_alive, start_daemon, stop_daemon
+from twinbird.daemon import (
+    is_daemon_reachable,
+    is_process_alive,
+    start_daemon,
+    stop_daemon,
+)
 from twinbird.netbird import find_netbird_bin, run_down, run_status, run_up
 from twinbird.platform import (
     PlatformConfig,
@@ -61,6 +67,8 @@ def up(
 
     if pid:
         remove_pid(platform.config_root, name)
+
+    seed_netbird_config(config_dir, resolved_iface)
 
     typer.echo(f"Starting daemon for instance '{name}'...")
     daemon_pid = start_daemon(
@@ -161,11 +169,13 @@ def _show_instance_status(name: str, platform: PlatformConfig) -> None:
 
     pid = read_pid(platform.config_root, name)
     alive = pid is not None and is_process_alive(pid)
+    reachable = not alive and is_daemon_reachable(metadata.daemon_addr)
 
-    if alive:
+    if alive or reachable:
         netbird_bin = find_netbird_bin()
         result = run_status(netbird_bin, metadata.daemon_addr)
-        typer.echo(f"--- {name} (PID {pid}) ---")
+        label = f"PID {pid}" if alive else "service"
+        typer.echo(f"--- {name} ({label}) ---")
         typer.echo(result.stdout or result.stderr)
     else:
         typer.echo(f"--- {name} (stopped) ---")
@@ -182,6 +192,10 @@ def list_all() -> None:
     for name in instances:
         pid = read_pid(platform.config_root, name)
         alive = pid is not None and is_process_alive(pid)
+        if not alive:
+            metadata = read_metadata(platform.config_root, name)
+            if metadata and is_daemon_reachable(metadata.daemon_addr):
+                alive = True
         state = "running" if alive else "stopped"
         if alive and is_service_registered(name):
             state = "running (persistent)"

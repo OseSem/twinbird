@@ -1,12 +1,26 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from twinbird import netbird
 from twinbird.config import read_pid, remove_pid, write_pid
+
+
+def is_daemon_reachable(daemon_addr: str) -> bool:
+    """Check if a daemon is listening on its address by attempting a TCP connect."""
+    parsed = urlparse(daemon_addr)
+    if parsed.scheme != "tcp" or not parsed.hostname or not parsed.port:
+        return False
+    try:
+        with socket.create_connection((parsed.hostname, parsed.port), timeout=1):
+            return True
+    except OSError:
+        return False
 
 
 def is_process_alive(pid: int) -> bool:

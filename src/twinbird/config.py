@@ -26,6 +26,21 @@ def ensure_instance_dir(config_root: Path, name: str) -> Path:
     return path
 
 
+def seed_netbird_config(config_dir: Path, interface_name: str) -> None:
+    """Ensure the NetBird config.json has the correct WgIface before daemon start."""
+    config_path = config_dir / "config.json"
+    if config_path.exists():
+        try:
+            data = json.loads(config_path.read_text())
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    else:
+        data = {}
+    if data.get("WgIface") != interface_name:
+        data["WgIface"] = interface_name
+        config_path.write_text(json.dumps(data, indent=2))
+
+
 def write_metadata(config_root: Path, metadata: InstanceMetadata) -> None:
     path = instance_dir(config_root, metadata.name) / "instance.json"
     path.write_text(json.dumps(asdict(metadata), indent=2))

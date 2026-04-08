@@ -86,6 +86,7 @@ _TASK_XML_TEMPLATE = """\
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Hidden>true</Hidden>
     <Enabled>true</Enabled>
   </Settings>
   <Actions>
@@ -117,9 +118,14 @@ def _write_task_xml(name: str, parts: list[str]) -> Path:
     """Write a Task Scheduler XML definition to a temp file and return its path."""
     from xml.sax.saxutils import escape as xml_escape
 
+    # Wrap in PowerShell to avoid a visible console window
+    ps_args = " ".join(f"'{p}'" for p in parts)
+    command = "powershell.exe"
+    arguments = f'-WindowStyle Hidden -NoProfile -Command "& {ps_args}"'
+
     xml_content = _TASK_XML_TEMPLATE.format(
-        command=xml_escape(parts[0]),
-        arguments=xml_escape(subprocess.list2cmdline(parts[1:])),
+        command=xml_escape(command),
+        arguments=xml_escape(arguments),
     )
     xml_file = Path(tempfile.gettempdir()) / f"twinbird-{name}.xml"
     xml_file.write_text(xml_content, encoding="utf-16")
